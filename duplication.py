@@ -29,7 +29,7 @@ def query_yes_no(question, default="yes"):
     :param default: is the presumed answer if the user just hits <Enter>.
                 It must be "yes" (the default), "no" or Nome (meaning
                 an answer is required of the user).
-    :return: value is Ture for "yes" or False for "no".
+    :return: value is True for "yes" or False for "no".
     """
     valid = {"yes": True, "ye": True, "y": True,
              "no": False, "n": False}
@@ -53,79 +53,93 @@ def query_yes_no(question, default="yes"):
             print("Please respond with 'yes' or 'no' (or 'y' or 'n').")
 
 
-def chunk_reader(fobj, chunk_size=1024):
+def chunk_reader(obj, chunk_size=1024):
     """Generator that reads a file in chunks of bytes"""
     while True:
-        chunk = fobj.read(chunk_size)
+        chunk = obj.read(chunk_size)
         if not chunk:
             return
         yield chunk
 
 
-def get_hash(filename, first_chunk_only=False, algorithms=hashlib.sha1):
+def get_hash(filename, first_chunk=False, algorithms=hashlib.sha1):
     """
+    Opens the file and runs it through a hash algorithm.
 
     :param filename: name of the file to read and feed to the hashlib.
-    :param first_chunk_only: if we should only read the first 1k of data only. default False
-    :param algorithms: what algorithm to use. default hashlib.sha1
-    :return: return the hashed object
+    :param first_chunk: if we should only read the first 1k of data only. default False.
+    :param algorithms: what algorithm to use. default hashlib.sha1.
+    :return: return the hashed object.
     """
     hash_obj = algorithms()
-    file_object = open(filename, 'rb')
+    file = open(filename, 'rb')
 
-    if first_chunk_only:
-        hash_obj.update(file_object.read(1024))
+    if first_chunk:
+        hash_obj.update(file.read(1024))
     else:
-        for chunk in chunk_reader(file_object):
+        for chunk in chunk_reader(file):
             hash_obj.update(chunk)
     hashed = hash_obj.digest()
 
-    file_object.close()
+    file.close()
     return hashed
 
 
 def files_size(paths):
-    files_size_list = {}
+    """
+    find all files in paths and group them by file size.
+
+    :param paths: list of paths to look for duplicate files.
+    :return: returns a dict of files by size.
+    """
+    files_size_rtn = {}
     for path in paths:
-        for dirpath, dirnames, filenames in os.walk(path):
-            for filename in filenames:
-                full_path = os.path.join(dirpath, filename)
+        for dir_path, dir_names, file_names in os.walk(path):
+            for filename in file_names:
+                full_path = os.path.join(dir_path, filename)
                 size = 0
                 try:
                     size = os.path.getsize(full_path)
-                except (OSError,):
-                    pass
+                except OSError as e:
+                    print(f'{e}')
 
                 # we don't care about files with 0 size. move to the next.
                 if size == 0:
                     continue
 
-                duplicate = files_size_list.get(size)
+                duplicate = files_size_rtn.get(size)
 
                 if duplicate:
-                    files_size_list[size].append(full_path)
+                    files_size_rtn[size].append(full_path)
                 else:
-                    files_size_list[size] = []  # create the list for this file size.
-                    files_size_list[size].append(full_path)
-    return files_size_list
+                    files_size_rtn[size] = []  # create the list for this file size.
+                    files_size_rtn[size].append(full_path)
+    return files_size_rtn
 
 
-def hashes_list(hash_list, first_chunk_only=True):
-    hashes_list_rtn = {}
-    for __, files in hash_list.items():
+def hashes_dict(hash_dict, first_chunk=True):
+    """
+    We take a list and hash the files and put them in a groups by hash.
+
+    :param hash_dict: this is a dict of files to be hashed.
+    :param first_chunk: if True we will only hash to first 1024k.
+    :return: returns a dict of files grouped by hash.
+    """
+    dict_rtn = {}
+    for __, files in hash_dict.items():
         if len(files) < 2:
             continue  # there is only one file of this size, so no there is no need to hash. move on to the next.
 
         for filename in files:
-            file_hash = get_hash(filename, first_chunk_only)
+            file_hash = get_hash(filename, first_chunk)
 
-            duplicate = hashes_list_rtn.get(file_hash)
+            duplicate = dict_rtn.get(file_hash)
             if duplicate:
-                hashes_list_rtn[file_hash].append(filename)
+                dict_rtn[file_hash].append(filename)
             else:
-                hashes_list_rtn[file_hash] = []  # create a list of files with matching this hash.
-                hashes_list_rtn[file_hash].append(filename)
-    return hashes_list_rtn
+                dict_rtn[file_hash] = []  # create a list of files with matching this hash.
+                dict_rtn[file_hash].append(filename)
+    return dict_rtn
 
 
 def delete_dir_search(hashes_full, dir_del, dir_keep):
@@ -154,6 +168,12 @@ def delete_dir_search(hashes_full, dir_del, dir_keep):
 
 
 def delete_dup_list(hashes_full):
+    """
+    Take a dictionary of all files that have hashes that collide and ass the user what to delete or keep all.
+
+    :param hashes_full: dict of all found dup files.
+    :return: returns a list of files to delete.
+    """
     delete_list = []  # list of files to delete
     for key, value in hashes_full.items():
         while len(value) > 1:
@@ -166,7 +186,7 @@ def delete_dup_list(hashes_full):
                     if a > len(value):
                         print('Selection does not exist. Please try again.')
                     else:
-                        break  # break out becuase we have a valid input
+                        break  # break out because we have a valid input
                 except ValueError:
                     print('Not an integer value...')
             if a <= -1:
@@ -194,33 +214,53 @@ def delete_dup_list(hashes_full):
     return delete_list
 
 
-def print_size(hashes):
+def print_size(files_dict):
+    """
+    Calculates the size of all files passed, added together and printed out.
+
+    :param files_dict: dictionary of files to have there files calculated.
+    :return: None
+    """
     size = 0
-    for key, value in hashes.items():
+    for key, value in files_dict.items():
         size += (os.path.getsize(value[0]) * (len(value) - 1))
 
     print(convert_size(size))
 
 
 def print_hash(hashes):
+    """
+    Prints out the hash group and the connect files.
+
+    :param hashes: dictionary of files to print out.
+    :return: None
+    """
     for key, value in hashes.items():
         print(key.hex(), value)
         print(os.path.dirname(value[1]))
 
 
 def main(paths):
+    """
+    Takes the paths pass by the user. It groups all the files in those directories by size, 1Kilobyte hash and full hash.
+    Then it takes all the files that have matching full hash and asks the user what files they wish to delete.
+
+    :param paths: the paths the user passed to the program.
+    :return: None
+    """
     if paths:
         files_by_size = files_size(paths)
-        hashes_on_1k = hashes_list(files_by_size)
-        hashes_full = hashes_list(hashes_on_1k, False)
+        hashes_on_1k = hashes_dict(files_by_size)
+        hashes_full = hashes_dict(hashes_on_1k, False)
 
-        # PrintSize(hashes_full)
+        # print_size(hashes_full)
 
         delete_list = delete_dup_list(hashes_full)
-        for x in delete_list:
-            os.remove(x)
+        if query_yes_no("do you really wish to delete the files you selected."):
+            for x in delete_list:
+                os.remove(x)
         # print(delete_list)
-        # PrintHash(hashes_full)
+        # print_hash(hashes_full)
     else:
         print('Please pass the paths to check as parameters to the script')
 
@@ -228,5 +268,5 @@ def main(paths):
 if __name__ == "__main__":
     main(sys.argv[1:])
     # start_time = time.time()
-    #main(["D:\\videos"])
+    # main(["D:\\videos"])
     # print("--- %s seconds ---" % (time.time() - start_time))
