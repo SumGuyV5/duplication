@@ -205,8 +205,8 @@ def delete_dup_list(hashes_full):
                         print(f'File {value[a]} and file {value[b]} are in the same directory')
                     elif query_yes_no(f'Would you like to delete all file found in "{dir_del}" '
                                       f'that are also found in "{dir_keep}"?'):
-                            delete_list += delete_dir_search(hashes_full, dir_del, dir_keep)
-                            continue  # delete_dir_search should have removed all the files.
+                        delete_list += delete_dir_search(hashes_full, dir_del, dir_keep)
+                        continue  # delete_dir_search should have removed all the files.
                 file = value[a]
                 del value[a]
                 print(f'Ok file "{file}" is being add to the delete list.')
